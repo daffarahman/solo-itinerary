@@ -2,7 +2,7 @@
 session_start();
 
 // Configure Content Security Policy
-header("Content-Security-Policy: default-src 'self'; script-src 'self' https://code.jquery.com https://cdn.jsdelivr.net 'unsafe-inline' 'unsafe-eval'; style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' https://code.jquery.com https://cdn.jsdelivr.net https://unpkg.com 'unsafe-inline' 'unsafe-eval'; style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://unpkg.com 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org;");
 
 // Generate CSRF token if not set
 if (empty($_SESSION['csrf_token'])) {
@@ -353,6 +353,10 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet Maps CSS and JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -375,14 +379,22 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
 </head>
 <body class="bg-neutral-100 text-neutral-800 m-0 p-0 overflow-hidden select-none">
 
-    <div class="flex h-screen w-screen overflow-hidden">
+    <div class="flex h-screen w-screen overflow-hidden relative">
         
+        <!-- Sidebar Backdrop for Mobile -->
+        <div id="sidebar-backdrop" class="fixed inset-0 bg-neutral-900/50 z-40 hidden md:hidden"></div>
+
         <!-- SIDEBAR PANEL (Configuration) -->
-        <div class="w-96 bg-white border-r border-neutral-200 flex flex-col h-full flex-shrink-0">
-            <!-- Brand Logo -->
-            <div class="p-6 border-b border-neutral-200">
-                <h1 class="text-xl font-bold text-neutral-900 leading-none">TOURIZME</h1>
-                <p class="text-[10px] text-neutral-500 mt-1 uppercase">Hill Climbing Crowd Optimizer</p>
+        <div id="sidebar" class="fixed md:static inset-y-0 left-0 z-50 w-80 md:w-96 bg-white border-r border-neutral-200 flex flex-col h-full transform -translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out flex-shrink-0">
+            <!-- Brand Logo & Close Button for Mobile -->
+            <div class="p-6 border-b border-neutral-200 flex justify-between items-center">
+                <div>
+                    <h1 class="text-xl font-bold text-neutral-900 leading-none">TOURIZME</h1>
+                    <p class="text-[10px] text-neutral-500 mt-1 uppercase">Hill Climbing Crowd Optimizer</p>
+                </div>
+                <button type="button" id="btn-close-sidebar" class="md:hidden text-neutral-400 hover:text-neutral-600 focus:outline-none text-xl p-1 font-mono leading-none">
+                    &times;
+                </button>
             </div>
             
             <!-- Parameters Form -->
@@ -502,8 +514,21 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
         <!-- MAIN WORKSPACE -->
         <div class="flex-1 flex flex-col h-full bg-neutral-100 overflow-hidden relative">
             
+            <!-- Mobile Navigation Bar (Header) -->
+            <div class="md:hidden flex items-center justify-between bg-white border-b border-neutral-200 px-4 py-3 flex-shrink-0 z-20">
+                <button type="button" id="btn-toggle-sidebar" class="text-neutral-700 focus:outline-none p-1.5 border border-neutral-300 rounded-none bg-neutral-50 hover:bg-neutral-100 flex items-center justify-center cursor-pointer">
+                    <div class="space-y-1 w-4 h-3 flex flex-col justify-between">
+                        <div class="h-[2px] bg-neutral-800 w-full"></div>
+                        <div class="h-[2px] bg-neutral-800 w-full"></div>
+                        <div class="h-[2px] bg-neutral-800 w-full"></div>
+                    </div>
+                </button>
+                <span class="text-xs font-bold text-neutral-900 uppercase tracking-normal">TOURIZME</span>
+                <div class="w-8 h-8"></div>
+            </div>
+
             <!-- Welcome Instructions (Initial) -->
-            <div id="welcome-panel" class="absolute inset-0 bg-neutral-50 flex flex-col justify-center items-center p-12 text-center z-10 transition duration-300">
+            <div id="welcome-panel" class="absolute inset-0 bg-neutral-50 flex flex-col justify-center items-center p-12 text-center z-10 transition duration-300 top-[53px] md:top-0">
                 <div class="max-w-md">
                     <h2 class="text-xl font-bold text-neutral-900">Perencanaan Jadwal Bebas Kepadatan</h2>
                     <p class="text-xs text-neutral-500 mt-2 leading-relaxed">
@@ -530,88 +555,112 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
             <div id="results-panel" class="hidden flex-1 flex flex-col h-full overflow-hidden">
                 
                 <!-- Top Header Actions -->
-                <div class="bg-white border-b border-neutral-200 px-6 py-4 flex justify-between items-center flex-shrink-0">
-                    <div>
-                        <h2 class="text-sm font-bold text-neutral-900 uppercase">Dashboard Itinerary Hasil Optimasi</h2>
-                        <p class="text-[10px] text-neutral-500 mt-0.5">Membandingkan rute pilihan awal vs rute hasil pencarian Hill Climbing</p>
+                <div class="bg-white border-b border-neutral-200 px-4 md:px-6 py-3 md:py-4 flex justify-between items-center flex-shrink-0">
+                    <div class="min-w-0 pr-2">
+                        <h2 class="text-xs md:text-sm font-bold text-neutral-900 uppercase truncate">Itinerary Hasil Optimasi</h2>
+                        <p class="text-[9px] md:text-[10px] text-neutral-500 mt-0.5 truncate">Hasil pencarian Hill Climbing</p>
                     </div>
-                    <div class="flex gap-2">
-                        <button type="button" id="btn-export-csv" class="border border-neutral-300 text-neutral-700 bg-white px-3 py-1.5 font-semibold text-xs uppercase hover:bg-neutral-50 rounded-none cursor-pointer">
-                            Ekspor Jadwal (.CSV)
+                    <div class="flex gap-1.5 flex-shrink-0">
+                        <button type="button" id="btn-export-csv" class="border border-neutral-300 text-neutral-700 bg-white px-2 md:px-3 py-1.5 font-semibold text-[10px] md:text-xs uppercase hover:bg-neutral-50 rounded-none cursor-pointer">
+                            CSV
                         </button>
-                        <button type="button" id="btn-reset" class="bg-neutral-800 text-white px-3 py-1.5 font-semibold text-xs uppercase hover:bg-neutral-900 rounded-none cursor-pointer">
-                            Revisi Input
+                        <button type="button" id="btn-reset" class="bg-neutral-800 text-white px-2 md:px-3 py-1.5 font-semibold text-[10px] md:text-xs uppercase hover:bg-neutral-900 rounded-none cursor-pointer">
+                            Revisi
                         </button>
                     </div>
                 </div>
 
                 <!-- Metrics Box -->
-                <div class="grid grid-cols-3 border-b border-neutral-200 bg-white flex-shrink-0">
+                <div class="grid grid-cols-3 border-b border-neutral-200 bg-white flex-shrink-0 divide-x divide-neutral-200">
                     <!-- Density Metric -->
-                    <div class="p-6 border-r border-neutral-200">
-                        <span class="text-[10px] text-neutral-400 font-semibold block uppercase">Skor Kepadatan Rata-rata</span>
-                        <div class="flex items-baseline gap-2 mt-2">
-                            <span id="metric-opt-density" class="text-3xl font-bold text-neutral-900">-</span>
-                            <span id="metric-base-density-diff" class="text-xs font-semibold">-</span>
+                    <div class="p-3 md:p-6">
+                        <span class="text-[9px] md:text-[10px] text-neutral-400 font-semibold block uppercase leading-none">Skor Kepadatan</span>
+                        <div class="flex items-baseline gap-1 mt-1 md:mt-2">
+                            <span id="metric-opt-density" class="text-lg md:text-3xl font-bold text-neutral-900 leading-none">-</span>
+                            <span id="metric-base-density-diff" class="text-[9px] md:text-xs font-semibold leading-none">-</span>
                         </div>
-                        <span class="text-[10px] text-neutral-500 mt-1 block">Baseline Awal: <span id="metric-base-density" class="font-medium">-</span></span>
+                        <span class="text-[9px] md:text-[10px] text-neutral-500 mt-1 block">Awal: <span id="metric-base-density" class="font-medium">-</span></span>
                     </div>
                     
                     <!-- Visited Count Metric -->
-                    <div class="p-6 border-r border-neutral-200">
-                        <span class="text-[10px] text-neutral-400 font-semibold block uppercase">Jumlah Tempat Dikunjungi</span>
-                        <div class="flex items-baseline gap-1 mt-2">
-                            <span id="metric-opt-visited" class="text-3xl font-bold text-neutral-900">-</span>
-                            <span class="text-xs text-neutral-500">/ <span id="metric-total-selected">-</span> POI</span>
+                    <div class="p-3 md:p-6">
+                        <span class="text-[9px] md:text-[10px] text-neutral-400 font-semibold block uppercase leading-none">POI Terkunjungi</span>
+                        <div class="flex items-baseline gap-0.5 mt-1 md:mt-2">
+                            <span id="metric-opt-visited" class="text-lg md:text-3xl font-bold text-neutral-900 leading-none">-</span>
+                            <span class="text-[10px] text-neutral-500 leading-none">/ <span id="metric-total-selected">-</span></span>
                         </div>
-                        <span class="text-[10px] text-neutral-500 mt-1 block">Baseline Awal: <span id="metric-base-visited" class="font-medium">-</span></span>
+                        <span class="text-[9px] md:text-[10px] text-neutral-500 mt-1 block">Awal: <span id="metric-base-visited" class="font-medium">-</span></span>
                     </div>
                     
                     <!-- Computation Time -->
-                    <div class="p-6">
-                        <span class="text-[10px] text-neutral-400 font-semibold block uppercase">Kecepatan Komputasi</span>
-                        <div class="text-3xl font-bold text-neutral-900 mt-2">
-                            <span id="metric-time">-</span> <span class="text-xs font-normal text-neutral-500">ms</span>
+                    <div class="p-3 md:p-6">
+                        <span class="text-[9px] md:text-[10px] text-neutral-400 font-semibold block uppercase leading-none">Komputasi</span>
+                        <div class="text-lg md:text-3xl font-bold text-neutral-900 mt-1 md:mt-2 leading-none">
+                            <span id="metric-time">-</span> <span class="text-[10px] font-normal text-neutral-500">ms</span>
                         </div>
-                        <span class="text-[10px] text-neutral-500 mt-1 block">Telah melewati <span id="metric-steps-count" class="font-semibold">-</span> langkah evaluasi</span>
+                        <span class="text-[9px] md:text-[10px] text-neutral-500 mt-1 block"><span id="metric-steps-count" class="font-semibold">-</span> langkah</span>
                     </div>
                 </div>
 
-                <!-- Itinerary Columns Layout -->
-                <div id="itinerary-lanes-container" class="flex-1 flex overflow-x-auto gap-6 p-6 items-start bg-neutral-100 overflow-y-auto">
-                    <!-- Day Lanes rendered dynamically here -->
+                <!-- Mobile View Mode Tabs -->
+                <div class="flex md:hidden border-b border-neutral-200 bg-white flex-shrink-0">
+                    <button type="button" id="tab-itinerary" class="flex-1 py-2.5 text-xs font-bold uppercase border-b-2 border-[#0f766e] text-[#0f766e] rounded-none cursor-pointer">
+                        Daftar Jadwal
+                    </button>
+                    <button type="button" id="tab-map" class="flex-1 py-2.5 text-xs font-bold uppercase border-b-2 border-transparent text-neutral-500 rounded-none cursor-pointer">
+                        Peta Rute
+                    </button>
+                </div>
+
+                <!-- Itinerary Columns Layout & Map Visualizer -->
+                <div class="flex-1 flex overflow-hidden bg-neutral-100 min-h-0 relative">
+                    <!-- Lanes Container -->
+                    <div id="itinerary-lanes-container" class="flex-1 flex overflow-x-auto gap-4 md:gap-6 p-4 md:p-6 items-start overflow-y-auto">
+                        <!-- Day Lanes rendered dynamically here -->
+                    </div>
+                    
+                    <!-- Map Visualizer Panel (Absolute overlay on mobile, static sidebar on desktop) -->
+                    <div id="map-panel" class="absolute md:static inset-0 md:inset-auto md:w-96 bg-white border-t md:border-t-0 md:border-l border-neutral-200 flex-shrink-0 flex flex-col h-full hidden md:flex z-10">
+                        <div class="p-3 border-b border-neutral-100 flex-shrink-0 flex justify-between items-center bg-white">
+                            <h3 class="text-xs font-bold text-neutral-800 uppercase">Visualisasi Rute Peta</h3>
+                            <span class="text-[9px] bg-[#0f766e]/10 text-[#0f766e] px-1.5 py-0.5 uppercase font-semibold">OpenStreetMap</span>
+                        </div>
+                        <div id="map" class="flex-1 w-full h-full z-0 bg-neutral-50 rounded-none"></div>
+                    </div>
                 </div>
 
                 <!-- Algorithm Stepper (Execution Trace) Panel -->
-                <div class="bg-white border-t border-neutral-200 p-6 flex flex-col flex-shrink-0 h-72">
-                    <div class="flex justify-between items-center mb-3">
+                <div class="bg-white border-t border-neutral-200 p-4 md:p-6 flex flex-col flex-shrink-0 h-56 md:h-72">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
                         <div>
-                            <h3 class="text-xs font-bold text-neutral-900 uppercase">Jejak Pencarian Algoritma Hill Climbing</h3>
-                            <p class="text-[10px] text-neutral-500">Pilih langkah di daftar atau putar simulasi untuk melihat perubahan jadwal di tiap tahapan optimasi</p>
+                            <h3 class="text-xs font-bold text-neutral-900 uppercase">Jejak Pencarian Hill Climbing</h3>
+                            <p class="text-[9px] md:text-[10px] text-neutral-500">Pilih langkah di daftar atau putar simulasi untuk melihat perubahan jadwal</p>
                         </div>
-                        <div class="flex gap-2 items-center">
-                            <button type="button" id="btn-anim-prev" class="border border-neutral-300 text-neutral-600 px-2.5 py-1 text-xs hover:bg-neutral-50 rounded-none disabled:opacity-40 cursor-pointer">&larr; Mundur</button>
-                            <button type="button" id="btn-anim-play" class="bg-[#0f766e] text-white px-4 py-1 text-xs font-semibold uppercase hover:bg-[#0c5c56] rounded-none cursor-pointer">Putar Simulasi</button>
-                            <button type="button" id="btn-anim-next" class="border border-neutral-300 text-neutral-600 px-2.5 py-1 text-xs hover:bg-neutral-50 rounded-none disabled:opacity-40 cursor-pointer">Maju &rarr;</button>
+                        <div class="flex gap-1.5 items-center w-full sm:w-auto">
+                            <button type="button" id="btn-anim-prev" class="flex-1 sm:flex-none border border-neutral-300 text-neutral-600 px-2.5 py-1 text-[10px] md:text-xs hover:bg-neutral-50 rounded-none disabled:opacity-40 cursor-pointer">&larr; Mundur</button>
+                            <button type="button" id="btn-anim-play" class="flex-1 sm:flex-none bg-[#0f766e] text-white px-3 py-1 text-[10px] md:text-xs font-semibold uppercase hover:bg-[#0c5c56] rounded-none cursor-pointer">Putar</button>
+                            <button type="button" id="btn-anim-next" class="flex-1 sm:flex-none border border-neutral-300 text-neutral-600 px-2.5 py-1 text-[10px] md:text-xs hover:bg-neutral-50 rounded-none disabled:opacity-40 cursor-pointer">Maju &rarr;</button>
                         </div>
                     </div>
                     
                     <!-- Console/Log List -->
-                    <div class="flex-1 overflow-y-auto bg-neutral-900 text-neutral-300 font-mono text-[11px] p-4 divide-y divide-neutral-800 rounded-none">
-                        <table class="w-full text-left select-none">
-                            <thead>
-                                <tr class="text-neutral-500 border-b border-neutral-800 pb-1 uppercase text-[9px]">
-                                    <th class="py-1 w-12">Langkah</th>
-                                    <th class="py-1">Tindakan Keputusan Optimizer</th>
-                                    <th class="py-1 w-24 text-right">Skor Cost</th>
-                                    <th class="py-1 w-32 text-right">Kepadatan Avg</th>
-                                    <th class="py-1 w-24 text-right">POI Terpilih</th>
-                                </tr>
-                            </thead>
-                            <tbody id="log-tbody" class="cursor-pointer">
-                                <!-- Steps rows rendered dynamically -->
-                            </tbody>
-                        </table>
+                    <div class="flex-1 overflow-auto bg-neutral-900 text-neutral-300 font-mono text-[10px] md:text-[11px] p-3 md:p-4 rounded-none">
+                        <div class="min-w-[500px]">
+                            <table class="w-full text-left select-none">
+                                <thead>
+                                    <tr class="text-neutral-500 border-b border-neutral-800 pb-1 uppercase text-[8px] md:text-[9px]">
+                                        <th class="py-1 w-12">Langkah</th>
+                                        <th class="py-1">Keputusan Optimizer</th>
+                                        <th class="py-1 w-20 text-right">Cost</th>
+                                        <th class="py-1 w-24 text-right">Kepadatan</th>
+                                        <th class="py-1 w-20 text-right">Terkunjungi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="log-tbody" class="cursor-pointer">
+                                    <!-- Steps rows rendered dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
@@ -634,6 +683,9 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
             let stepsData = [];
             let currentStepIndex = 0;
             let animationInterval = null;
+            let map = null;
+            let markersLayer = null;
+            let polylineLayer = null;
 
             // Select all POIs convenience button
             $('#select-all-pois').click(function(e) {
@@ -647,6 +699,46 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
                 stopAnimation();
                 $('#results-panel').addClass('hidden');
                 $('#welcome-panel').removeClass('hidden');
+                if ($(window).width() < 768) {
+                    $('#sidebar').removeClass('-translate-x-full');
+                    $('#sidebar-backdrop').removeClass('hidden');
+                }
+            });
+
+            // Toggle Sidebar Drawer for Mobile
+            $('#btn-toggle-sidebar').click(function() {
+                $('#sidebar').removeClass('-translate-x-full');
+                $('#sidebar-backdrop').removeClass('hidden');
+            });
+
+            $('#btn-close-sidebar, #sidebar-backdrop').click(function() {
+                closeSidebar();
+            });
+
+            function closeSidebar() {
+                $('#sidebar').addClass('-translate-x-full');
+                $('#sidebar-backdrop').addClass('hidden');
+            }
+
+            // Mobile Tab Switches
+            $('#tab-itinerary').click(function() {
+                $(this).addClass('border-[#0f766e] text-[#0f766e]').removeClass('border-transparent text-neutral-500');
+                $('#tab-map').removeClass('border-[#0f766e] text-[#0f766e]').addClass('border-transparent text-neutral-500');
+                $('#itinerary-lanes-container').removeClass('hidden');
+                $('#map-panel').addClass('hidden md:flex');
+            });
+
+            // Make sure active mode is visually clean
+            $('#tab-map').click(function() {
+                $(this).addClass('border-[#0f766e] text-[#0f766e]').removeClass('border-transparent text-neutral-500');
+                $('#tab-itinerary').removeClass('border-[#0f766e] text-[#0f766e]').addClass('border-transparent text-neutral-500');
+                $('#itinerary-lanes-container').addClass('hidden');
+                $('#map-panel').removeClass('hidden').addClass('flex');
+                if (map) {
+                    setTimeout(() => {
+                        map.invalidateSize();
+                    }, 100);
+                }
             });
 
             // Run optimizer via POST
@@ -671,6 +763,7 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
                     return;
                 }
 
+                closeSidebar();
                 $('#btn-optimize').prop('disabled', true).text('Memproses Optimasi...');
 
                 $.ajax({
@@ -875,6 +968,9 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
                 // Update button disabled state
                 $('#btn-anim-prev').prop('disabled', idx === 0);
                 $('#btn-anim-next').prop('disabled', idx === stepsData.length - 1);
+
+                // Update map markers and paths
+                updateMapForSchedule(step.schedule);
             }
 
             // Play/Pause Animation Simulation
@@ -968,6 +1064,99 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
                 link.click();
                 document.body.removeChild(link);
             });
+
+            // Initialize Leaflet Map
+            function initMap() {
+                if (map) {
+                    map.invalidateSize();
+                    return;
+                }
+                
+                // Surakarta (Solo) center coordinates: -7.5666, 110.8166
+                map = L.map('map', {
+                    zoomControl: false,
+                    attributionControl: false
+                }).setView([-7.5666, 110.8166], 13);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19
+                }).addTo(map);
+
+                // Add zoom control on the top right
+                L.control.zoom({
+                    position: 'topright'
+                }).addTo(map);
+
+                markersLayer = L.layerGroup().addTo(map);
+                polylineLayer = L.layerGroup().addTo(map);
+            }
+
+            // Update Map for current schedule
+            function updateMapForSchedule(schedule) {
+                initMap();
+                markersLayer.clearLayers();
+                polylineLayer.clearLayers();
+
+                let colors = ['#0f766e', '#2563eb', '#e11d48', '#d97706', '#7c3aed', '#0891b2', '#4f46e5'];
+                let bounds = [];
+
+                for (let day in schedule) {
+                    let dayVisits = schedule[day];
+                    let latlngs = [];
+                    let color = colors[(parseInt(day) - 1) % colors.length];
+
+                    dayVisits.forEach((visit, index) => {
+                        let lat = visit.poi.latitude;
+                        let lng = visit.poi.longitude;
+                        let name = visit.poi.input_name;
+                        let timeStr = formatTime(visit.start) + ' - ' + formatTime(visit.end);
+
+                        latlngs.push([lat, lng]);
+                        bounds.push([lat, lng]);
+
+                        // Custom square marker badge
+                        let markerHtml = `
+                            <div class="flex items-center justify-center bg-white border-2 text-neutral-800 font-bold font-mono text-[9px] w-6 h-6 rounded-none" style="border-color: ${color};">
+                                H${day}
+                            </div>
+                        `;
+                        
+                        let customIcon = L.divIcon({
+                            html: markerHtml,
+                            className: 'custom-div-icon',
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        });
+
+                        let marker = L.marker([lat, lng], { icon: customIcon })
+                            .bindPopup(`<div class="font-sans p-1 text-xs"><strong class="block mb-1 text-neutral-900">${name}</strong>Hari ${day} &middot; ${timeStr}</div>`, {
+                                closeButton: false,
+                                className: 'custom-popup'
+                            });
+                        markersLayer.addLayer(marker);
+                    });
+
+                    // Draw travel polyline per day
+                    if (latlngs.length > 1) {
+                        let polyline = L.polyline(latlngs, {
+                            color: color,
+                            weight: 3,
+                            opacity: 0.8,
+                            dashArray: '5, 5'
+                        });
+                        polylineLayer.addLayer(polyline);
+                    }
+                }
+
+                // Auto-center and fit map bounds to show all markers
+                if (bounds.length > 0) {
+                    // Slight delay to ensure DOM is fully layed out and Leaflet reads size correctly
+                    setTimeout(() => {
+                        map.invalidateSize();
+                        map.fitBounds(bounds, { padding: [40, 40] });
+                    }, 100);
+                }
+            }
         });
     </script>
 </body>
