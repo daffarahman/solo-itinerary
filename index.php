@@ -250,7 +250,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         'visited_count' => $current_metrics['visited_count'],
         'schedule' => $current_decoded['schedule'],
         'visited' => $current_decoded['visited'],
-        'unvisited' => $current_decoded['unvisited']
+        'unvisited' => $current_decoded['unvisited'],
+        'swapped' => []
     ];
 
     $step = 1;
@@ -263,6 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $best_neighbor_decoded = null;
         $best_neighbor_metrics = null;
         $best_neighbor_action = '';
+        $best_neighbor_swapped = [];
         
         $K = count($current_permutation);
         
@@ -284,9 +286,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     $best_neighbor_decoded = $decoded;
                     $best_neighbor_metrics = $metrics;
                     
-                    $nameA = isset($pois_db[$current_permutation[$i]]) ? $pois_db[$current_permutation[$i]]['input_name'] : $current_permutation[$i];
-                    $nameB = isset($pois_db[$current_permutation[$j]]) ? $pois_db[$current_permutation[$j]]['input_name'] : $current_permutation[$j];
+                    $poi_a_id = $current_permutation[$i];
+                    $poi_b_id = $current_permutation[$j];
+                    $nameA = isset($pois_db[$poi_a_id]) ? $pois_db[$poi_a_id]['input_name'] : $poi_a_id;
+                    $nameB = isset($pois_db[$poi_b_id]) ? $pois_db[$poi_b_id]['input_name'] : $poi_b_id;
                     $best_neighbor_action = "Tukar urutan '{$nameA}' dengan '{$nameB}'";
+                    $best_neighbor_swapped = [$poi_a_id, $poi_b_id];
                 }
             }
         }
@@ -306,7 +311,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 'visited_count' => $current_metrics['visited_count'],
                 'schedule' => $current_decoded['schedule'],
                 'visited' => $current_decoded['visited'],
-                'unvisited' => $current_decoded['unvisited']
+                'unvisited' => $current_decoded['unvisited'],
+                'swapped' => $best_neighbor_swapped
             ];
             $step++;
         }
@@ -847,7 +853,24 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
                     let tdStep = $('<td>').addClass('py-2 font-semibold').text(step.step);
                     let tdAction = $('<td>').addClass('py-2 text-neutral-200').text(step.action);
                     let tdCost = $('<td>').addClass('py-2 text-right').text(Math.round(step.cost));
-                    let tdDensity = $('<td>').addClass('py-2 text-right').text(Math.round(step.avg_density) + '%');
+                    
+                    // Draw visual crowd density indicator bar
+                    let densityPct = Math.round(step.avg_density);
+                    let densityColor = 'bg-emerald-600';
+                    if (densityPct > 70) {
+                        densityColor = 'bg-rose-600';
+                    } else if (densityPct > 35) {
+                        densityColor = 'bg-amber-500';
+                    }
+                    let tdDensity = $('<td>').addClass('py-2 text-right').html(`
+                        <div class="flex items-center justify-end gap-2">
+                            <span class="font-semibold">${densityPct}%</span>
+                            <div class="hidden sm:block w-16 h-1.5 bg-neutral-800 rounded-none overflow-hidden border border-neutral-700">
+                                <div class="h-full ${densityColor} rounded-none" style="width: ${densityPct}%"></div>
+                            </div>
+                        </div>
+                    `);
+                    
                     let tdVisited = $('<td>').addClass('py-2 text-right').text(step.visited_count);
 
                     tr.append(tdStep, tdAction, tdCost, tdDensity, tdVisited);
@@ -925,12 +948,24 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
                                 densityLabel = 'Sedang';
                             }
 
-                            let card = $('<div>').addClass('p-3 rounded-none flex flex-col border border-neutral-200 border-l-0 ' + borderClass);
+                            // Highlight card if it was swapped in the current step
+                            let isSwapped = (step.swapped && step.swapped.includes(visit.poi.id));
+                            let highlightClass = isSwapped ? 'outline-2 outline-[#0f766e] outline-solid z-10' : '';
+
+                            let card = $('<div>').addClass('p-3 rounded-none flex flex-col border border-neutral-200 border-l-0 ' + borderClass + ' ' + highlightClass);
                             let cardTime = $('<span>').addClass('text-[10px] text-neutral-500 font-semibold font-mono').text(formatTime(visit.start) + ' - ' + formatTime(visit.end));
                             let cardTitle = $('<h4>').addClass('text-xs font-bold text-neutral-800 leading-tight mt-1').text(visit.poi.input_name);
                             
                             let cardFooter = $('<div>').addClass('flex justify-between items-center text-[9px] text-neutral-500 mt-2 border-t border-neutral-100 pt-1.5');
                             let category = $('<span>').text(visit.poi.category.charAt(0).toUpperCase() + visit.poi.category.slice(1));
+                            
+                            if (isSwapped) {
+                                category = $('<div>').addClass('flex items-center gap-1').html(`
+                                    <span class="text-white bg-[#0f766e] px-1 font-bold text-[8px] uppercase leading-normal rounded-none">Ditukar</span>
+                                    <span class="text-neutral-500">${visit.poi.category.charAt(0).toUpperCase() + visit.poi.category.slice(1)}</span>
+                                `);
+                            }
+
                             let densityText = $('<span>').addClass('font-semibold').text('Kepadatan: ' + density + '% (' + densityLabel + ')');
 
                             cardFooter.append(category, densityText);
