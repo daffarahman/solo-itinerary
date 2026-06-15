@@ -1,0 +1,9 @@
+services:
+  web:
+    build: .
+    container_name: tourizme-bootleg-web
+    ports:
+      - "9922:80"
+    volumes:
+      - .:/var/www/html
+    restart: unless-stopped
