@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    container_name: tourizme-bootleg-web
+    container_name: solo-itinerary-web
     ports:
       - "9922:80"
     volumes:

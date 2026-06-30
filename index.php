@@ -353,7 +353,7 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TOURIZME - Crowd Avoidance Scheduler</title>
+    <title>Solo Itinerary - Crowd Avoidance Scheduler</title>
     <!-- Tailwind CSS v4 Browser CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -395,7 +395,7 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
             <!-- Brand Logo & Close Button for Mobile -->
             <div class="p-6 border-b border-neutral-200 flex justify-between items-center">
                 <div>
-                    <h1 class="text-xl font-bold text-neutral-900 leading-none">TOURIZME</h1>
+                    <h1 class="text-xl font-bold text-neutral-900 leading-none">Solo Itinerary</h1>
                     <p class="text-[10px] text-neutral-500 mt-1 uppercase">Hill Climbing Crowd Optimizer</p>
                 </div>
                 <button type="button" id="btn-close-sidebar" class="md:hidden text-neutral-400 hover:text-neutral-600 focus:outline-none text-xl p-1 font-mono leading-none">
@@ -529,7 +529,7 @@ list($pois_db, $failed_pois, $crowd_scores) = load_datasets();
                         <div class="h-[2px] bg-neutral-800 w-full"></div>
                     </div>
                 </button>
-                <span class="text-xs font-bold text-neutral-900 uppercase tracking-normal">TOURIZME</span>
+                <span class="text-xs font-bold text-neutral-900 uppercase tracking-normal">Solo Itinerary</span>
                 <div class="w-8 h-8"></div>
             </div>
 
